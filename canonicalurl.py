@@ -65,7 +65,7 @@ def get_web_page(url):
     Args:
         url - unicode string
 
-    Returns: (html, headers, final_url) or (None, None, None) on error.
+    Returns: (data, enc, final_url) or (None, None, None) on error.
     '''
 
     # if it's not unicode, it must be utf8, otherwise fail
@@ -74,20 +74,21 @@ def get_web_page(url):
             s = url.decode('utf8')
         except Exception as e:
             logging.exception(e)
-            return (url, None, None)
+            return (None, None, None)
 
 
     # Convert URI to URL if necessary
     try:
-        url = ensure_url(url)
+        u = ensure_url(url)
+        url = u
     except Exception as e:
         logging.exception(e)
-        return (url, None, None)
+        return (None, None, None)
 
     # Validate URL
     if not validate_url(url):
-        logging.info('bad url: %s ' % url)
-        return (url, None, None)
+        logging.error('bad url: %s ' % url)
+        return (None, None, None)
 
     # 
     # Download and Processs
@@ -156,7 +157,8 @@ def decode_web_page(html, enc):
         ucontent = UnicodeDammit(html, is_html=True).unicode_markup
 
         return ucontent
-    except Exception:
+    except Exception as e:
+        logging.exception(e)
         pass
 
     # honestly, how did we get here?
@@ -228,7 +230,7 @@ def get_canonical_url(url):
             logging.exception(e)
             return (url, None, None, 'invalid url')
 
-    page, headers, final_url = get_web_page(url)
+    page, enc, final_url = get_web_page(url)
     if final_url is not None:
         if not isinstance(final_url, unicode):
             final_url = final_url.decode('utf8')
@@ -244,7 +246,7 @@ def get_canonical_url(url):
         return (url, ret_url, method, 'no content')
 
     # check for decoding errors
-    page = decode_web_page(page, headers)
+    page = decode_web_page(page, enc)
     if page is None:
         # could not decode
         return (url, ret_url, method, 'decode failed')
