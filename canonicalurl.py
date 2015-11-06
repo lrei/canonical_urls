@@ -19,6 +19,9 @@ from cookielib import CookieJar
 from bs4 import BeautifulSoup, UnicodeDammit
 import urlparse
 import rfc3987
+from canonicalencoding import get_declared_encodings, get_header_encoding 
+from canonicalencoding import detect_encoding, try_encoding, try_encoding_force
+
 
 logging.getLogger("bs4").setLevel(logging.ERROR)
 
@@ -124,22 +127,32 @@ def get_web_page(url):
                                       urllib2.HTTPCookieProcessor(cookie_jar))
         headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 5.1; rv:10.0.1) Gecko/20100101 Firefox/10.0.1',
+                'Accept-encoding': 'gzip,deflate',
         }
         opener.addheaders = headers.items()
         response = opener.open(url, None, REQ_TIMEOUT)
-        content_encoding = response.info().get('Content-Encoding') 
         html = None
-        if content_encoding is not None:
-            if  content_encoding in ('gzip', 'x-gzip'):
-                html = read_gzip(response)
-            elif content_encoding == 'deflate':
-                html = read_deflate(response)
-            else:
-                html = response.read(MAX_READ)
-        else:
-                html = response.read(MAX_READ)
 
+        # Get Response URL
         final_url = response.geturl()
+
+        # Get Response Headers
+        h = response.headers
+
+        # Ignore Non-HTML results
+        if 'text/html' not in h.get('Content-Type') and h.get('Content-Type'):
+            msg = 'no html in headers of %s' % url
+            logging.debug(msg)
+            return (None, response.headers, final_url)
+
+        # Handle Gzip and Deflate
+        if 'gzip' in h.get('Content-Encoding'):
+            html = read_gzip(response)
+        elif 'deflate' in h.get('Content-Encoding'):
+            html = read_deflate(response)
+        else:
+            html = response.read(MAX_READ)
+
         return (html, response.headers, final_url)
 
     except urllib2.HTTPError as ex:
@@ -159,18 +172,35 @@ def decode_web_page(html, headers):
     '''
     Returns unicode str containing the HTML content of the web page
     '''
-    try:
-        # try first using the encoding that was provided by the publisher
-        encoding = headers['content-type'].split('charset=')[-1]
-        ucontent = unicode(html, encoding, 'replace')
-        return ucontent
-    # if we fail, resort to UnicodeDammit
-    except Exception:
-        try:
-            ucontent = UnicodeDammit(html, is_html=True)
+
+    # Guard against Empty
+    if html is None:
+        return None
+
+    encodings = []
+    
+    # try first using the encoding that was provided by the headers
+    enc = get_header_encoding(headers)
+    if enc is not None:
+        ucontent = try_encoding(html, enc)
+        if ucontent is not None:
             return ucontent
-        except Exception:
-            return None
+        logging.debug('header encoding failed')
+
+        encodings.append(enc)
+
+    # if we fail, resort to UnicodeDammit
+    # because we have cchardet installed, this will try to use it
+    try:
+        ucontent = UnicodeDammit(html, is_html=True).unicode_markup
+        return ucontent
+    except Exception:
+        pass
+
+    # honestly, how did we get here?
+    logging.debug('UnicodeDammit failed')
+
+    return None
 
 
 def extract_canonical(unicode_content):
@@ -184,10 +214,11 @@ def extract_canonical(unicode_content):
     try:
         url_can = soup.find('link', rel='canonical')
         if url_can:
-            u = url_can['content']
-            u = ensure_url(u)
-            if validate_url(u):
-                return u
+            u = url_can.get('href')
+            if u:
+                u = ensure_url(u)
+                if validate_url(u):
+                    return u
 
     except Exception:
         pass
@@ -198,9 +229,10 @@ def extract_canonical(unicode_content):
                                            'content': True})
         if url_can:
             u = url_can['content']
-            u = ensure_url(u)
-            if validate_url(u):
-                return u
+            if u:
+                u = ensure_url(u)
+                if validate_url(u):
+                    return u
 
     except Exception:
         pass
@@ -224,7 +256,7 @@ def get_canonical_url(url):
             url = url.decode('utf8')
         except Exception as e:
             logging.exception(e)
-            return (url, None, None)
+            return (url, None, None, 'invalid url')
 
     page, headers, final_url = get_web_page(url)
     if final_url is not None:
@@ -237,22 +269,22 @@ def get_canonical_url(url):
     # check if page was downloaded
     if page is None:
         # no content could be fetched
-        return (url, ret_url, method)
+        return (url, ret_url, method, 'no content')
 
     # check for decoding errors
     page = decode_web_page(page, headers)
     if page is None:
         # could not decode
-        return (url, ret_url, method)
+        return (url, ret_url, method, 'decode failed')
 
     # attempt to extract canonical/og url from content
     canonical = extract_canonical(page)
     if canonical is None:
         # couldnt extract canonical/og url
-        return (url, ret_url, method)
+        return (url, ret_url, method, 'no canonical')
 
     # we got it!!!
     ret_url = canonical
     method = 'canonical'
 
-    return (url, ret_url, method)
+    return (url, ret_url, method, 'canonical')
