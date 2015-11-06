@@ -21,6 +21,9 @@ from multiprocessing import cpu_count
 from canonical_urls.canonicalurl import get_canonical_url
 
 
+logging.getLogger("requests").setLevel(logging.CRITICAL)
+logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+logging.getLogger("bs4").setLevel(logging.CRITICAL)
 logging.basicConfig(level=logging.INFO)
 
 
@@ -36,7 +39,7 @@ def worker(url):
             return None
 
     try:
-        ori, res, met, rea = get_canonical_url(url)
+        ori, res, met, reason = get_canonical_url(url)
     except Exception as e:
         msg = '%s : %s' % (url.encode('utf8'), e)
         logging.exception(msg)
@@ -45,7 +48,8 @@ def worker(url):
     if ori == None or res == None:
         return None
 
-    return json.dumps({'original': ori, 'result': res, 'method': met, 'reason':rea})
+    return json.dumps({'original': ori, 'result': res, 'method': met,
+                       'reason': reason})
 
 
 def main():
