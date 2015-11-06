@@ -36,7 +36,7 @@ def worker(url):
             return None
 
     try:
-        ori, res, met = get_canonical_url(url)
+        ori, res, met, rea = get_canonical_url(url)
     except Exception as e:
         msg = '%s : %s' % (url.encode('utf8'), e)
         logging.exception(msg)
@@ -45,7 +45,7 @@ def worker(url):
     if ori == None or res == None:
         return None
 
-    return json.dumps({'original': ori, 'result': res, 'method': met})
+    return json.dumps({'original': ori, 'result': res, 'method': met, 'reason':rea})
 
 
 def main():
