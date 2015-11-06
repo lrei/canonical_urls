@@ -6,10 +6,6 @@ License: MIT License
 Fetches canonical (or open graph) version of URL
 Failing that, returns redirect url if redirect happens.
 
-TODO:
-    - Some characters could not be decoded, and were replaced with 
-      REPLACEMENT CHARACTER.
-    - Check for pages that return gzip w/o setting headers
 '''
 
 from __future__ import print_function
