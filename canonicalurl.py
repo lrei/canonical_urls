@@ -93,10 +93,6 @@ def get_web_page(url):
     # Download and Processs
     #
     try:
-        # Not currently using Custom Headers
-        headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 5.1; rv:10.0.1) Gecko/20100101 Firefox/10.0.1',
-        }
         r = requests.get(url, timeout=REQ_TIMEOUT, allow_redirects=True,
                          stream=True)
         r.raise_for_status()
