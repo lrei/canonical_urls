@@ -9,33 +9,19 @@ Failing that, returns redirect url if redirect happens.
 '''
 
 from __future__ import print_function
-# Others
 import logging
-import urllib2
 import re
-import gzip
-from StringIO import StringIO
-from cookielib import CookieJar
-from bs4 import BeautifulSoup, UnicodeDammit
+import requests
+from bs4 import BeautifulSoup, UnicodeDammit, FeatureNotFound
 import urlparse
 import rfc3987
-from canonicalencoding import get_declared_encodings, get_header_encoding 
+from canonicalencoding import get_declared_encodings 
 from canonicalencoding import detect_encoding, try_encoding, try_encoding_force
 
-
-logging.getLogger("bs4").setLevel(logging.ERROR)
 
 
 REQ_TIMEOUT = 30
 MAX_READ = 2 * 1024 * 1024  # 2MB - Probably Enough for The Verge's HTML
-
-
-class MyHTTPRedirectHandler(urllib2.HTTPRedirectHandler):
-    ''' Redirect Handler '''
-    # pylint: disable=no-init
-    def http_error_302(self, req, fp, code, msg, headers):
-        return urllib2.HTTPRedirectHandler.http_error_302(self, req, fp, code,
-                                                          msg, headers)
 
 
 def url_encode_non_ascii(b):
@@ -74,20 +60,6 @@ def validate_url(url):
     return True
 
 
-def read_gzip(response):
-    buf = StringIO(response.read(MAX_READ))
-    f = gzip.GzipFile(fileobj=buf)
-    data = f.read()
-    return data
-
-
-def read_deflate(response):
-    buf = StringIO(response.read(MAX_READ))
-    f = zlib.decompress(buf)
-    data = f.read()
-    return data
-
-
 def get_web_page(url):
     ''' Fetches content at a given URL.
     Args:
@@ -121,66 +93,59 @@ def get_web_page(url):
     # Download and Processs
     #
     try:
-        # open page using cookie support and url redirects
-        cookie_jar = CookieJar()
-        opener = urllib2.build_opener(MyHTTPRedirectHandler,
-                                      urllib2.HTTPCookieProcessor(cookie_jar))
+        # Not currently using Custom Headers
         headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 5.1; rv:10.0.1) Gecko/20100101 Firefox/10.0.1',
-                'Accept-encoding': 'gzip,deflate',
         }
-        opener.addheaders = headers.items()
-        response = opener.open(url, None, REQ_TIMEOUT)
-        html = None
+        r = requests.get(url, timeout=REQ_TIMEOUT, allow_redirects=True,
+                         stream=True)
+        r.raise_for_status()
 
         # Get Response URL
-        final_url = response.geturl()
+        final_url = r.url
 
-        # Get Response Headers
-        h = response.headers
+        # Get Encoding
+        enc = r.encoding
 
-        # Ignore Non-HTML results
-        if 'text/html' not in h.get('Content-Type') and h.get('Content-Type'):
-            msg = 'no html in headers of %s' % url
+        # Get content-type
+        content_type = r.headers.get('content-type')
+
+        if content_type and 'text/html' not in content_type:
+            msg = 'content type not supported %s for %s' % (content_type, url)
             logging.debug(msg)
-            return (None, response.headers, final_url)
+            return (None, enc, final_url)
 
-        # Handle Gzip and Deflate
-        if 'gzip' in h.get('Content-Encoding'):
-            html = read_gzip(response)
-        elif 'deflate' in h.get('Content-Encoding'):
-            html = read_deflate(response)
-        else:
-            html = response.read(MAX_READ)
+        # get data
+        data = r.content
 
-        return (html, response.headers, final_url)
+        return (data, enc, final_url)
 
-    except urllib2.HTTPError as ex:
-        msg = 'download failed: url=%s http error code: %d' % (url, ex.code)
+    except requests.exceptions.HTTPError as e:
+        msg = 'download failed: url=%s reason: %d' % (url, r.status_code)
         logging.debug(msg)
         return (None, None, None)
 
     except Exception as ex:
-        msg = 'download failed: url=%s' % (url,)
+        msg = 'download failed: url=%s with %s' % (url, repr(ex))
         logging.debug(msg)
         return (None, None, None)
 
     return (None, None, None)
 
 
-def decode_web_page(html, headers):
+def decode_web_page(html, enc):
     '''
     Returns unicode str containing the HTML content of the web page
     '''
 
     # Guard against Empty
     if html is None:
+        logging.debug('no content')
         return None
 
     encodings = []
     
     # try first using the encoding that was provided by the headers
-    enc = get_header_encoding(headers)
     if enc is not None:
         ucontent = try_encoding(html, enc)
         if ucontent is not None:
@@ -193,6 +158,7 @@ def decode_web_page(html, headers):
     # because we have cchardet installed, this will try to use it
     try:
         ucontent = UnicodeDammit(html, is_html=True).unicode_markup
+
         return ucontent
     except Exception:
         pass
@@ -207,7 +173,11 @@ def extract_canonical(unicode_content):
     '''Extracts canonical URL or Open Graph URL from the content'''
     try:
         soup = BeautifulSoup(unicode_content, 'html5lib')
-    except:
+    except FeatureNotFound:
+        logging.exception('missing html5lib?')
+        raise
+    except Exception as e:
+        logging.exception(e)
         return None
 
     # Try Canonical URL
@@ -215,6 +185,7 @@ def extract_canonical(unicode_content):
         url_can = soup.find('link', rel='canonical')
         if url_can:
             u = url_can.get('href')
+            logging.debug('got canonical')
             if u:
                 u = ensure_url(u)
                 if validate_url(u):
@@ -230,6 +201,7 @@ def extract_canonical(unicode_content):
         if url_can:
             u = url_can['content']
             if u:
+                logging.debug('got open graph')
                 u = ensure_url(u)
                 if validate_url(u):
                     return u
@@ -238,6 +210,8 @@ def extract_canonical(unicode_content):
         pass
 
     # Failed
+    logging.debug('no canonical url found')
+
     return None
 
 
@@ -265,6 +239,8 @@ def get_canonical_url(url):
         if final_url != url:
             ret_url = ensure_url(final_url)
             method = 'redirect'
+            logging.debug('got redirect')
+
 
     # check if page was downloaded
     if page is None:
@@ -281,7 +257,7 @@ def get_canonical_url(url):
     canonical = extract_canonical(page)
     if canonical is None:
         # couldnt extract canonical/og url
-        return (url, ret_url, method, 'no canonical')
+        return (url, ret_url, method, 'no attributes')
 
     # we got it!!!
     ret_url = canonical

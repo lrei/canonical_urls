@@ -33,24 +33,6 @@ def fix_charset(encoding):
     return CHARSETS.get(encoding, encoding)
 
 
-def get_header_encoding(headers):
-    '''Get content from headers provided by urllib
-    '''
-    if not headers:
-        return None
-
-    content_type = headers.get('content-type')
-    if content_type:
-        # check for charset
-        if 'charset' in content_type:
-            try:
-                enc = content_type.split('charset=')[-1]
-                return fix_charset(enc)
-            except:
-                return None
-    return None
-
-
 def get_declared_encodings(page):
     '''Returns a list Encodings found in the content
     Based on code from python-readability
