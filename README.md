@@ -1,6 +1,10 @@
-# canonical_urls
-A script to make a request to a url follow redirects and attempt to obtain canonical urls
+# canonical_urls microservice
 
-Recommend using it with futures (process not thread).
+A ZMQ based multiprocess microservice to determine the canonical version of an url.
 
+ 1. make a request to a url and follow redirects
+ 2. extract canonical or open graph url from the html
+
+
+## Acknowledgments
 Originally developed for the [SYMPHONY EU Project](http://projectsymphony.eu) by [Luis Rei](https://github.com/lrei) based on code by [Gregor Leban](https://github.com/gregorleban/).

@@ -6,22 +6,45 @@ License: MIT License
 Fetches canonical (or open graph) version of URL
 Failing that, returns redirect url if redirect happens.
 
+Possible Improvements:
+    2 - Check ret_url, remove bad extensions: e.g. .rar, .zip, .mov
 '''
 
 from __future__ import print_function
+import os
+import inspect
 import logging
 import re
 import requests
 from bs4 import BeautifulSoup, UnicodeDammit, FeatureNotFound
 import urlparse
 import rfc3987
-from canonicalencoding import get_declared_encodings 
-from canonicalencoding import detect_encoding, try_encoding, try_encoding_force
-
+import tldextract
+from canonicalencoding import try_encoding
 
 
 REQ_TIMEOUT = 30
-MAX_READ = 2 * 1024 * 1024  # 2MB - Probably Enough for The Verge's HTML
+MAX_READ = 2 * 1024 * 1024  # 2MB
+
+
+def get_extractor(cache_file):
+    extract = tldextract.TLDExtract(cache_file=cache_file)
+    return extract
+
+def load_list(listpath):
+    """Loads domain whitelist or shortener list
+    """
+    domain_list = set()
+
+    with open(listpath) as fin:
+        for line in fin:
+            domain = line.decode('utf8').lower().strip()
+            if domain:
+                domain_list.add(domain)
+
+        msg = "Loaded whitelist list with {} domains".format(len(domain_list))
+        logging.info(msg)
+    return domain_list
 
 
 def url_encode_non_ascii(b):
@@ -60,7 +83,7 @@ def validate_url(url):
     return True
 
 
-def get_web_page(url):
+def get_web_page(url, timeout=REQ_TIMEOUT, maxsize=MAX_READ):
     ''' Fetches content at a given URL.
     Args:
         url - unicode string
@@ -71,11 +94,10 @@ def get_web_page(url):
     # if it's not unicode, it must be utf8, otherwise fail
     if not isinstance(url, unicode):
         try:
-            s = url.decode('utf8')
+            s = url.decode('utf8')  # noqa - we check if decoding works here
         except Exception as e:
             logging.exception(e)
             return (None, None, None)
-
 
     # Convert URI to URL if necessary
     try:
@@ -90,11 +112,11 @@ def get_web_page(url):
         logging.error('bad url: %s ' % url)
         return (None, None, None)
 
-    # 
+    #
     # Download and Processs
     #
     try:
-        r = requests.get(url, timeout=REQ_TIMEOUT, allow_redirects=True,
+        r = requests.get(url, timeout=timeout, allow_redirects=True,
                          stream=True)
         r.raise_for_status()
 
@@ -141,7 +163,7 @@ def decode_web_page(html, enc):
         return None
 
     encodings = []
-    
+
     # try first using the encoding that was provided by the headers
     if enc is not None:
         ucontent = try_encoding(html, enc)
@@ -213,9 +235,11 @@ def extract_canonical(unicode_content):
     return None
 
 
-def get_canonical_url(url):
+def get_canonical_url(url, whitelist=None, expandlist=None, 
+                      extract=tldextract.extract, timeout=REQ_TIMEOUT,
+                      maxsize=MAX_READ):
     '''Get the canonical (or open graph) URL
-    Returns a triple (original_url, new_url, method)
+    Returns a 4-tuple (original_url, new_url, method, reason)
 
     where method in ['canonical', 'redirect', 'original']
     '''
@@ -228,9 +252,25 @@ def get_canonical_url(url):
             url = url.decode('utf8')
         except Exception as e:
             logging.exception(e)
-            return (url, None, None, 'invalid url')
+            return {'url_original': url,
+                    'url_retrieved': None, 
+                    'method': None, 
+                    'reason': 'invalid url'}
 
-    page, enc, final_url = get_web_page(url)
+    # Only download URLs that are in the WHITELIST
+    # or in the EXPANDLIST
+    if expandlist:
+        domain = extract(url).registered_domain.lower().strip()
+        if (domain not in whitelist) and (domain not in expandlist):
+            msg = "not in expandlist:\t%s" % (domain.encode('utf8'),)
+            logger.debug(msg)
+            return {'url_original': url,
+                    'url_retrieved': ret_url, 
+                    'method': None, 
+                    'reason': 'not in lists'}
+
+    # fetch page
+    page, enc, final_url = get_web_page(url, timeout, maxsize)
     if final_url is not None:
         if not isinstance(final_url, unicode):
             final_url = final_url.decode('utf8')
@@ -240,25 +280,49 @@ def get_canonical_url(url):
             logging.debug('got redirect')
 
 
+    # check if whitelist exists
+    if whitelist:
+        domain = extract(ret_url).registered_domain.lower()
+        # check if url is in whitelist
+        if domain not in whitelist:
+            domain = domain.encode('utf8')
+            msg = "not in whitelist:\t{} ({})".format(domain, method)
+            logger.debug(msg)
+            return {'url_original': url,
+                    'url_retrieved': ret_url, 
+                    'method': None, 
+                    'reason': 'not in whitelist'}
+
     # check if page was downloaded
     if page is None:
         # no content could be fetched
-        return (url, ret_url, method, 'no content')
+        return {'url_original': url,
+                'url_retrieved': ret_url, 
+                'method': method, 
+                'reason': 'no content'}
 
     # check for decoding errors
     page = decode_web_page(page, enc)
     if page is None:
         # could not decode
-        return (url, ret_url, method, 'decode failed')
+        return {'url_original': url,
+                'url_retrieved': ret_url, 
+                'method': method, 
+                'reason': 'decode failed'}
 
     # attempt to extract canonical/og url from content
     canonical = extract_canonical(page)
     if canonical is None:
         # couldnt extract canonical/og url
-        return (url, ret_url, method, 'no attributes')
+        return URLData(url, ret_url, method, 'no attributes')
 
     # we got it!!!
     ret_url = canonical
     method = 'canonical'
 
-    return (url, ret_url, method, 'canonical')
+    return {'url_original': url,
+            'url_retrieved': ret_url, 
+            'method': method, 
+            'reason': 'canonical'}
+
+
