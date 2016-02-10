@@ -133,12 +133,24 @@ def setup_logging(config):
 def load_lists(config):
     """Returns Whitelist, Shortner List
     """
+    whitelist = None
+    shorteners = None
 
     shortener_path = config.get('lists', 'shorteners')
     whitelist_path = config.get('lists', 'whitelist')
 
-    whitelist = load_list(whitelist_path)
-    shorteners = load_list(shortener_path)
+    try:
+        whitelist = load_list(whitelist_path)
+    except Exception as e:
+        logging.exception(e)
+        whitelist = None
+
+
+    try:
+        shorteners = load_list(shortener_path)
+    except Exception as e:
+        logging.exception(e)
+        shorteners = None
 
     return whitelist, shorteners
 
