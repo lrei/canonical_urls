@@ -6,8 +6,6 @@ License: MIT License
 Fetches canonical (or open graph) version of URL
 Failing that, returns redirect url if redirect happens.
 
-Possible Improvements:
-    2 - Check ret_url, remove bad extensions: e.g. .rar, .zip, .mov
 '''
 
 from __future__ import print_function
@@ -40,7 +38,8 @@ def load_list(listpath):
         for line in fin:
             domain = line.decode('utf8').lower().strip()
             if domain:
-                domain_list.add(domain)
+                if not domain.startswith('#'):
+                    domain_list.add(domain)
 
         msg = "Loaded whitelist list with {} domains".format(len(domain_list))
         logging.info(msg)
@@ -88,7 +87,7 @@ def get_web_page(url, timeout=REQ_TIMEOUT, maxsize=MAX_READ):
     Args:
         url - unicode string
 
-    Returns: (data, enc, final_url) or (None, None, None) on error.
+    Returns: (data, enc, final_url, None) or (None, None, None, Reason) on error.
     '''
 
     # if it's not unicode, it must be utf8, otherwise fail
@@ -97,7 +96,7 @@ def get_web_page(url, timeout=REQ_TIMEOUT, maxsize=MAX_READ):
             s = url.decode('utf8')  # noqa - we check if decoding works here
         except Exception as e:
             logging.exception(e)
-            return (None, None, None)
+            return (None, None, None, 'url')
 
     # Convert URI to URL if necessary
     try:
@@ -105,12 +104,12 @@ def get_web_page(url, timeout=REQ_TIMEOUT, maxsize=MAX_READ):
         url = u
     except Exception as e:
         logging.exception(e)
-        return (None, None, None)
+        return (None, None, None, 'url')
 
     # Validate URL
     if not validate_url(url):
         logging.error('bad url: %s ' % url)
-        return (None, None, None)
+        return (None, None, None, 'url')
 
     #
     # Download and Processs
@@ -132,24 +131,29 @@ def get_web_page(url, timeout=REQ_TIMEOUT, maxsize=MAX_READ):
         if content_type and 'text/html' not in content_type:
             msg = 'content type not supported %s for %s' % (content_type, url)
             logging.debug(msg)
-            return (None, enc, final_url)
+            return (None, enc, final_url, 'content-type')
 
         # get data
         data = r.content
 
-        return (data, enc, final_url)
+        return (data, enc, final_url, None)
+
+    except requests.exceptions.Timeout as e:
+        msg = 'timedout: {}'.format(url)
+        logging.debug(msg)
+        return (None, None, None, 'timeout')
 
     except requests.exceptions.HTTPError as e:
         msg = 'download failed: url=%s reason: %d' % (url, r.status_code)
         logging.debug(msg)
-        return (None, None, None)
+        return (None, None, None, str(r.status_code))
 
     except Exception as ex:
         msg = 'download failed: url=%s with %s' % (url, repr(ex))
         logging.debug(msg)
-        return (None, None, None)
+        return (None, None, None, 'download')
 
-    return (None, None, None)
+    return (None, None, None, 'unk')
 
 
 def decode_web_page(html, enc):
@@ -205,7 +209,6 @@ def extract_canonical(unicode_content):
         url_can = soup.find('link', rel='canonical')
         if url_can:
             u = url_can.get('href')
-            logging.debug('got canonical')
             if u:
                 u = ensure_url(u)
                 if validate_url(u):
@@ -230,7 +233,7 @@ def extract_canonical(unicode_content):
         pass
 
     # Failed
-    logging.debug('no canonical url found')
+    #logging.debug('no canonical url found')
 
     return None
 
@@ -263,14 +266,14 @@ def get_canonical_url(url, whitelist=None, expandlist=None,
         domain = extract(url).registered_domain.lower().strip()
         if (domain not in whitelist) and (domain not in expandlist):
             msg = "not in expandlist:\t%s" % (domain.encode('utf8'),)
-            logger.debug(msg)
+            logging.debug(msg)
             return {'url_original': url,
                     'url_retrieved': ret_url, 
                     'method': None, 
                     'reason': 'not in lists'}
 
     # fetch page
-    page, enc, final_url = get_web_page(url, timeout, maxsize)
+    page, enc, final_url, err = get_web_page(url, timeout, maxsize)
     if final_url is not None:
         if not isinstance(final_url, unicode):
             final_url = final_url.decode('utf8')
@@ -287,7 +290,7 @@ def get_canonical_url(url, whitelist=None, expandlist=None,
         if domain not in whitelist:
             domain = domain.encode('utf8')
             msg = "not in whitelist:\t{} ({})".format(domain, method)
-            logger.debug(msg)
+            logging.debug(msg)
             return {'url_original': url,
                     'url_retrieved': ret_url, 
                     'method': None, 

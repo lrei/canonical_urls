@@ -5,10 +5,6 @@ Symphony Canonical URL Service
 Luis Rei <luis.rei@ijs.si> @lmrei http://luisrei.com
 version 1.1
 10 Feb 2016
-
-1 - Read configuration
-2 - Setup (incl logging, whitelist, shorteners, ...)
-2 - ZMQ Service
 """
 
 import os
@@ -16,7 +12,6 @@ import argparse
 import logging
 import ConfigParser
 import multiprocessing
-import cPickle as pickle
 from functools import partial
 from zmqservice import serve, worker_task_builder
 from canonicalurl import get_canonical_url, load_list, get_extractor
@@ -25,8 +20,8 @@ from canonicalurl import get_canonical_url, load_list, get_extractor
 DEFAULT_PORT = 7171
 ENV_PREFIX = 'CANONICALURL_'
 DEFAULT_DIR = '/etc/canonicalurl/'
-DEFAULT_CONFIG = 'canonicalurl.conf'
-DEFAULT_NUM_WORKERS = multiprocessing.cpu_count() * 2
+DEFAULT_CONFIG = 'canonicalurl.cfg'
+DEFAULT_NUM_WORKERS = multiprocessing.cpu_count() * 5
 
 
 def init_config():
@@ -63,7 +58,7 @@ def init_config():
     config.set('canonical', 'maxsize', 2 * 1024 * 1024)
     config.set('canonical', 'tldcache', './cache.tld') 
 
-
+    # return
     return config
 
 
@@ -96,9 +91,9 @@ def read_config_file(config, filepath=None):
 
     # Try each path until one returns
     for fpath in confpaths:
-        if filepath is not None and os.path.isfile(fpath):
+        if fpath is not None and os.path.isfile(fpath):
             try:
-                config.read(filepath)
+                config.read(fpath)
                 return config
             except:
                 pass
@@ -112,22 +107,11 @@ def setup_logging(config):
     """
     format_str = "%(asctime)-15s %(process)d: %(message)s"
     logpath = config.get('service', 'log')
-    loglevel = config.get('service', 'loglevel')
+    loglevel = config.getint('service', 'loglevel')
 
-    """
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-    root.setLevel(loglevel)
-
-    ch = logging.FileHandler(logpath, encoding='utf8')
-    formatter = logging.Formatter(FORMAT)
-    ch.setFormatter(formatter)
-    ch.setLevel(loglevel)
-
-    root.addHandler(ch)
-    """
     # General logging
-    logging.basicConfig(filename=logpath, format=format_str, level=loglevel)
+    logging.basicConfig(filename=logpath, filemode='w',
+                        format=format_str, level=loglevel)
 
 
 def load_lists(config):
@@ -220,8 +204,10 @@ def main():
     worker_task = worker_task_builder(f, backend)
     
     # Print PID
-    m = 'Starting Canonical URL Service with PID: {}'.format(os.getpid())
+    m = 'Starting Canonical URL Service with PID: {} and {} workers'
+    m = m.format(os.getpid(), n_workers)
     logging.info(m)
+    print(m)
 
     # Run forever (or until kill -INT)
     serve(port, worker_task, n_workers, backend)
