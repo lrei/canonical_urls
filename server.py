@@ -59,8 +59,8 @@ def make_app(whitelist, expandlist, extract, timeout, maxsize, maxclients):
 
 
 def serve(port, whitelist, expandlist, extract, timeout, maxsize, maxclients):
-    app = make_app(whitelist, expandlist, extract, timeout)
-    server = HTTPServer(app)
+    ap = make_app(whitelist, expandlist, extract, timeout, maxsize, maxclients)
+    server = HTTPServer(ap)
     server.bind(port)
     server.start(0)  # Forks multiple sub-processes
     IOLoop.current().start()
