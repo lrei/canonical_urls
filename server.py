@@ -58,7 +58,7 @@ def make_app(whitelist, expandlist, extract, timeout, maxsize, maxclients):
     ])
 
 
-def serve(port, whitelist, expandlist, extract, timeout):
+def serve(port, whitelist, expandlist, extract, timeout, maxsize, maxclients):
     app = make_app(whitelist, expandlist, extract, timeout)
     server = HTTPServer(app)
     server.bind(port)
