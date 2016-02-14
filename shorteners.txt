@@ -1,3 +1,17 @@
+#ow.ly
+#owl.li
+#nmem.ag
+#amzn.to
+#amzn.com
+#fb.me
+#on.fb.me
+#fbuy.me
+#etsy.me
+#binged.it
+#youtu.be
+#facebook.appstore.com
+arsn.al
+wfp.to
 uapp.ly
 po.st
 ktimes.co
@@ -24,8 +38,6 @@ aje.me
 alj.am
 al.st
 dthin.gs
-amzn.to
-amzn.com
 amcurl.com
 aexp.co
 andr.tv
@@ -35,7 +47,6 @@ a-fr.is
 aol.it
 appsumo.com
 apadv.co
-facebook.appstore.com
 tw.appstore.com
 arcnct.co
 argusne.ws
@@ -139,7 +150,8 @@ chic.ag
 on.thec-l.com
 cle.clinic
 ctt.ec
-cl.ly, cld.me
+cl.ly
+cld.me
 sarcas.ms
 cloudup.com
 cmsa.me
@@ -244,11 +256,8 @@ eoc.cc
 ecrea.tv
 eam.me
 es.pn
-etsy.me
 exm.nr
 extr.tv
-fb.me
-on.fb.me
 fandan.co
 f-st.co
 on.fearnet.com
@@ -284,7 +293,6 @@ foxs.pt
 fxs.pt
 foak.co
 freepr.es
-fbuy.me
 ff.im
 newspr.es
 w.fullsail.edu
@@ -341,8 +349,6 @@ hndiary.com
 thr.cm
 thd.co
 ht.ly
-ow.ly
-owl.li
 gtr.bz
 hou.li
 hp.nu
@@ -362,8 +368,6 @@ ind.pn
 indy.st
 cus.tm
 inst.cr
-instagr.am
-instapaper.com
 intel.ly
 ihg.co
 into.tv
@@ -373,7 +377,6 @@ icp-c.com
 sqrl.it
 ithacajr.nl
 ithem.es
-itun.es
 itv.co
 ivill.ag
 jcrew.co
@@ -546,7 +549,6 @@ nie.mn
 ning.it
 nssn.co
 nixle.us
-nmem.ag
 noip.co
 nokia.ly
 nowth.is
@@ -897,7 +899,6 @@ yhoo.it
 fro.gy
 my.yoplait.com
 gossi.pr
-youtu.be
 bible.us
 zagat.bz
 zagg.to
@@ -944,7 +945,6 @@ adjix.com
 afx.cc
 all.fuseurl.com
 alturl.com
-amzn.to
 ar.gy
 arst.ch
 atu.ca
@@ -954,7 +954,6 @@ alj.am
 b2l.me
 bacn.me
 bcool.bz
-binged.it
 bit.ly
 bizj.us
 bloat.me
@@ -994,7 +993,6 @@ eepurl.com
 eweri.com
 fa.by
 fav.me
-fb.me
 fbshare.me
 ff.im
 fff.to
@@ -1088,7 +1086,6 @@ on.cnn.com
 on.mktw.net
 onforb.es
 orz.se
-ow.ly
 ping.fm
 pli.gs
 pnt.me
